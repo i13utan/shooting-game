@@ -15,8 +15,6 @@ const MIN_SPAWN_INTERVAL = 300;
 const BOSS_TIMER_MS = 60000;         // 60s road phase → boss
 const BOSS_WARNING_MS = 2500;
 const WIDE_SHOT_DURATION_MS = 10000;  // 10s power-up
-const BOMB_COOLDOWN_MS = 8000;        // 8s between bombs
-
 // Parallax star counts per layer
 const STARS_FAR = 80;
 const STARS_MID = 50;
@@ -164,30 +162,6 @@ class SoundFX {
     });
   }
 
-  bomb() {
-    const c = this._ensure(), t = c.currentTime;
-    // Big whoosh + flash
-    const dur = 0.4;
-    const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) * 0.8;
-    const src = c.createBufferSource(); src.buffer = buf;
-    const g = c.createGain();
-    g.gain.setValueAtTime(0.25, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    const f = c.createBiquadFilter(); f.type = 'lowpass';
-    f.frequency.setValueAtTime(2000, t);
-    f.frequency.exponentialRampToValueAtTime(100, t + dur);
-    src.connect(f).connect(g).connect(c.destination); src.start(t);
-    // Sub bass
-    const osc = c.createOscillator(), g2 = c.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(60, t);
-    osc.frequency.exponentialRampToValueAtTime(20, t + 0.5);
-    g2.gain.setValueAtTime(0.4, t);
-    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
-    osc.connect(g2).connect(c.destination); osc.start(t); osc.stop(t + 0.5);
-  }
 }
 
 // ============================================================
@@ -856,10 +830,6 @@ class Game {
     this.touchPrev = null;     // previous touch position in canvas coords
     this.touchDelta = null;    // {dx, dy} per frame
 
-    // Bomb
-    this.bombCooldown = 0;
-    this.bombFlash = 0;        // white flash overlay timer
-
     // Game objects
     this.starsBack = [];
     this.starsFront = [];
@@ -895,7 +865,6 @@ class Game {
     this.hudLives   = document.getElementById('hud-lives');
     this.finalScoreEl = document.getElementById('final-score-value');
     this.highScoreEl  = document.getElementById('high-score-value');
-    this.btnBomb    = document.getElementById('btn-bomb');
 
     this.container = document.getElementById('game-container');
 
@@ -953,7 +922,6 @@ class Game {
     window.addEventListener('keydown', (e) => {
       this.keys[e.key] = true;
       if (e.key === ' ') e.preventDefault();
-      if (e.key === 'b' || e.key === 'B') this._triggerBomb();
     });
     window.addEventListener('keyup', (e) => { this.keys[e.key] = false; });
 
@@ -1011,16 +979,6 @@ class Game {
     this.canvas.addEventListener('touchend', onTouchEnd);
     this.canvas.addEventListener('touchcancel', onTouchEnd);
 
-    // --- Bomb button ---
-    this.btnBomb.addEventListener('click', (e) => {
-      e.preventDefault();
-      this._triggerBomb();
-    });
-    // Prevent touch on bomb from also being picked up by canvas
-    this.btnBomb.addEventListener('touchstart', (e) => {
-      e.stopPropagation();
-    });
-
     // --- UI buttons ---
     document.getElementById('btn-start').addEventListener('click', () => this.startGame());
     document.getElementById('btn-retry').addEventListener('click', () => this.startGame());
@@ -1030,68 +988,6 @@ class Game {
     window.addEventListener('orientationchange', () => {
       setTimeout(() => this._resizeCanvas(), 100);
     });
-  }
-
-  // ----------------------------------------------------------
-  //  Bomb
-  // ----------------------------------------------------------
-  _triggerBomb() {
-    if (this.state !== 'playing') return;
-    if (this.bombCooldown > 0) return;
-
-    this.bombCooldown = BOMB_COOLDOWN_MS;
-    this.bombFlash = 12;  // frames of white flash
-    this.screenShake = 10;
-    this.sfx.bomb();
-
-    // Destroy all enemy bullets
-    for (const eb of this.enemyBullets) {
-      this._spawnParticles(eb.x + eb.w / 2, eb.y + eb.h / 2, 2, '#ffffff');
-      eb.alive = false;
-    }
-
-    // Deal 5 damage to boss
-    if (this.boss && this.boss.alive && !this.boss.entering) {
-      this.boss.takeDamage(5);
-      this._spawnParticles(this.boss.cx, this.boss.cy, 15, '#ffffff');
-      if (!this.boss.alive) {
-        this.score += this.boss.scoreValue;
-        this._spawnBossExplosion();
-        this._clearBullets();
-        this.sfx.bossExplosion();
-        this.screenShake = 15;
-        if (Math.random() < 0.05) {
-          this.items.push(new SpeedItem(this.boss.cx, this.boss.cy));
-        } else if (Math.random() < 0.03) {
-          this.items.push(new WideShotItem(this.boss.cx, this.boss.cy));
-        }
-        this.bossActive = false;
-        this.bossTimer = BOSS_TIMER_MS;
-        this.boss = null;
-      }
-    }
-
-    // Destroy all on-screen enemies
-    for (const e of this.enemies) {
-      if (!e.alive) continue;
-      e.alive = false;
-      this.score += e.scoreValue;
-      this._spawnExplosion(e.x + e.w / 2, e.y + e.h / 2, e.maxHp > 1);
-    }
-
-    // Big ring of particles from player
-    const px = this.player.x + this.player.w / 2;
-    const py = this.player.y + this.player.h / 2;
-    for (let i = 0; i < 40; i++) {
-      const p = new Particle(px, py, ['#ffffff', '#ffcc44', '#ff6644', '#44ccff'][i % 4]);
-      const a = (Math.PI * 2 / 40) * i;
-      const sp = rand(4, 10);
-      p.vx = Math.cos(a) * sp;
-      p.vy = Math.sin(a) * sp;
-      p.size = rand(3, 7);
-      p.decay = rand(0.01, 0.025);
-      this.particles.push(p);
-    }
   }
 
   // ----------------------------------------------------------
@@ -1114,11 +1010,8 @@ class Game {
     this.lastFireTime = 0;
     this.lastSpawnTime = 0;
     this.screenShake = 0;
-    this.bombCooldown = 0;
-    this.bombFlash = 0;
     this.uiTitle.classList.add('hidden');
     this.uiGameOver.classList.add('hidden');
-    this.btnBomb.classList.remove('hidden');
   }
 
   gameOver() {
@@ -1130,7 +1023,6 @@ class Game {
     this.finalScoreEl.textContent = this.score;
     this.highScoreEl.textContent = this.highScore;
     this.uiGameOver.classList.remove('hidden');
-    this.btnBomb.classList.add('hidden');
   }
 
   // ----------------------------------------------------------
@@ -1164,17 +1056,6 @@ class Game {
 
     if (this.state !== 'playing') return;
     this.playTime += dt;
-
-    // Bomb cooldown
-    if (this.bombCooldown > 0) this.bombCooldown = Math.max(0, this.bombCooldown - dt);
-    if (this.bombFlash > 0) this.bombFlash--;
-
-    // Update bomb button opacity based on cooldown
-    if (this.bombCooldown > 0) {
-      this.btnBomb.style.opacity = '0.35';
-    } else {
-      this.btnBomb.style.opacity = '1';
-    }
 
     const pcx = this.player.x + this.player.w / 2;
     const pcy = this.player.y + this.player.h / 2;
@@ -1497,15 +1378,6 @@ class Game {
     if (this.state === 'playing' && !this.bossActive) this._drawTimer(ctx);
     if (this.bossWarning > 0) this._drawWarning(ctx);
 
-    // Bomb cooldown indicator
-    if (this.state === 'playing') this._drawBombCooldown(ctx);
-
-    // Bomb flash overlay
-    if (this.bombFlash > 0) {
-      ctx.fillStyle = `rgba(255,255,255,${this.bombFlash / 12 * 0.4})`;
-      ctx.fillRect(-10, -10, CANVAS_W + 20, CANVAS_H + 20);
-    }
-
     ctx.restore();
   }
 
@@ -1553,17 +1425,6 @@ class Game {
     ctx.restore();
   }
 
-  _drawBombCooldown(ctx) {
-    if (this.bombCooldown <= 0) return;
-    const ratio = this.bombCooldown / BOMB_COOLDOWN_MS;
-    ctx.save();
-    ctx.textAlign = 'right';
-    ctx.font = 'bold 11px monospace';
-    ctx.fillStyle = `rgba(255,100,68,${0.4 + ratio * 0.4})`;
-    ctx.shadowColor = '#ff4422'; ctx.shadowBlur = 4;
-    ctx.fillText(`BOMB: ${Math.ceil(this.bombCooldown / 1000)}s`, CANVAS_W - 12, CANVAS_H - 12);
-    ctx.restore();
-  }
 }
 
 // ============================================================

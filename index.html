@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>STELLAR VANGUARD</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <div id="ui-title" class="ui-overlay">
+      <h1>STELLAR VANGUARD</h1>
+      <p class="subtitle">- 星間前衛戦闘機 -</p>
+      <div class="instructions">
+        <p>移動：矢印キー / マウス / タッチ</p>
+        <p>攻撃：自動連射</p>
+        <p>ボム：Bキー / 画面右下ボタン</p>
+      </div>
+      <button id="btn-start" class="ui-btn">START</button>
+    </div>
+
+    <div id="ui-gameover" class="ui-overlay hidden">
+      <h1>GAME OVER</h1>
+      <p class="final-score">SCORE: <span id="final-score-value">0</span></p>
+      <p class="high-score">HIGH SCORE: <span id="high-score-value">0</span></p>
+      <button id="btn-retry" class="ui-btn">RETRY</button>
+    </div>
+
+    <div id="ui-hud">
+      <span id="hud-score">SCORE: 0</span>
+      <span id="hud-speed">SPD: 5</span>
+      <span id="hud-lives">♥♥♥</span>
+    </div>
+
+    <button id="btn-bomb" class="hidden">BOMB</button>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
